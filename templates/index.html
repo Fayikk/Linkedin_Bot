@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 LinkedIn Bot - Web GUI</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        .container-fluid {
+            padding-top: 20px;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            padding: 15px 20px;
+        }
+        .btn-custom {
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+        .btn-primary-custom {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+        }
+        .btn-primary-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .btn-danger-custom {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+            border: none;
+            color: white;
+        }
+        .btn-success-custom {
+            background: linear-gradient(45deg, #51cf66, #40c057);
+            border: none;
+            color: white;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-ready { background-color: #6c757d; }
+        .status-running { background-color: #28a745; animation: pulse 2s infinite; }
+        .status-error { background-color: #dc3545; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .log-area {
+            height: 300px;
+            overflow-y: auto;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .stats-card {
+            text-align: center;
+            padding: 20px;
+        }
+        .stats-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .progress-custom {
+            height: 8px;
+            border-radius: 4px;
+            background-color: #e9ecef;
+        }
+        .progress-bar-custom {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border-radius: 4px;
+        }
+        .form-control {
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .emoji-icon {
+            font-size: 1.2em;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sol Panel - Konfigürasyon -->
+            <div class="col-lg-4">
+                <!-- Bot Durumu -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-robot emoji-icon"></i>Bot Durumu</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <span id="status-indicator" class="status-indicator status-ready"></span>
+                            <span id="status-text" class="fw-bold">Hazır</span>
+                        </div>
+                        <div class="mb-3">
+                            <small class="text-muted">Güncel İşlem:</small>
+                            <div id="current-task">Beklemede</div>
+                        </div>
+                        <div class="progress progress-custom mb-3">
+                            <div id="progress-bar" class="progress-bar progress-bar-custom" style="width: 0%"></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <button id="start-btn" class="btn btn-primary-custom btn-custom w-100">
+                                    <i class="fas fa-play me-2"></i>Başlat
+                                </button>
+                            </div>
+                            <div class="col-6">
+                                <button id="stop-btn" class="btn btn-danger-custom btn-custom w-100" disabled>
+                                    <i class="fas fa-stop me-2"></i>Durdur
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Konfigürasyon -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-cog emoji-icon"></i>Konfigürasyon</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="config-form">
+                            <div class="mb-3">
+                                <label class="form-label"><i class="fas fa-envelope emoji-icon"></i>LinkedIn Email:</label>
+                                <input type="email" class="form-control" id="email" value="{{ config.email }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label"><i class="fas fa-lock emoji-icon"></i>LinkedIn Şifre:</label>
+                                <input type="password" class="form-control" id="password" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label"><i class="fas fa-search emoji-icon"></i>Anahtar Kelimeler:</label>
+                                <input type="text" class="form-control" id="keywords" value="{{ config.keywords }}" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-users emoji-icon"></i>Max Profil:</label>
+                                        <input type="number" class="form-control" id="max_profiles" value="{{ config.max_profiles }}" min="1" max="1000">
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-file emoji-icon"></i>Başlangıç Sayfa:</label>
+                                        <input type="number" class="form-control" id="start_page" value="1" min="1" max="50">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label"><i class="fas fa-comment emoji-icon"></i>Mesaj Şablonu:</label>
+                                <textarea class="form-control" id="message" rows="4">{{ config.message }}</textarea>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-clock emoji-icon"></i>Mesaj Arası (sn):</label>
+                                        <input type="number" class="form-control" id="delay_messages" value="{{ config.delay_messages }}" min="1" max="60">
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-clock emoji-icon"></i>Sayfa Arası (sn):</label>
+                                        <input type="number" class="form-control" id="delay_searches" value="{{ config.delay_searches }}" min="1" max="30">
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" id="save-config-btn" class="btn btn-success-custom btn-custom w-100">
+                                <i class="fas fa-save me-2"></i>Ayarları Kaydet
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sağ Panel - İstatistikler ve Loglar -->
+            <div class="col-lg-8">
+                <!-- İstatistikler -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar emoji-icon"></i>İstatistikler</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-3">
+                                <div class="stats-card">
+                                    <div id="stat-found" class="stats-number">0</div>
+                                    <small class="text-muted">Bulunan</small>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="stats-card">
+                                    <div id="stat-processed" class="stats-number">0</div>
+                                    <small class="text-muted">İşlenen</small>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="stats-card">
+                                    <div id="stat-successful" class="stats-number text-success">0</div>
+                                    <small class="text-muted">Başarılı</small>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="stats-card">
+                                    <div id="stat-failed" class="stats-number text-danger">0</div>
+                                    <small class="text-muted">Başarısız</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canlı Loglar -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-terminal emoji-icon"></i>Canlı Loglar</h5>
+                        <button id="clear-logs-btn" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-trash me-1"></i>Temizle
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="log-area" class="log-area"></div>
+                    </div>
+                </div>
+
+                <!-- Raporlar -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-file-csv emoji-icon"></i>Raporlar</h5>
+                        <button id="refresh-reports-btn" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-sync me-1"></i>Yenile
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="reports-list">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin me-2"></i>Raporlar yükleniyor...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Socket.IO bağlantısı
+        const socket = io();
+
+        // DOM elementleri
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const currentTask = document.getElementById('current-task');
+        const progressBar = document.getElementById('progress-bar');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const logArea = document.getElementById('log-area');
+        const saveConfigBtn = document.getElementById('save-config-btn');
+        const clearLogsBtn = document.getElementById('clear-logs-btn');
+        const refreshReportsBtn = document.getElementById('refresh-reports-btn');
+
+        // İstatistik elementleri
+        const statFound = document.getElementById('stat-found');
+        const statProcessed = document.getElementById('stat-processed');
+        const statSuccessful = document.getElementById('stat-successful');
+        const statFailed = document.getElementById('stat-failed');
+
+        let botRunning = false;
+
+        // Event listeners
+        startBtn.addEventListener('click', startCampaign);
+        stopBtn.addEventListener('click', stopCampaign);
+        saveConfigBtn.addEventListener('click', saveConfig);
+        clearLogsBtn.addEventListener('click', clearLogs);
+        refreshReportsBtn.addEventListener('click', loadReports);
+
+        // Socket.IO events
+        socket.on('status_update', updateStatus);
+        socket.on('log_message', addLogMessage);
+
+        // Sayfa yüklendiğinde
+        window.addEventListener('load', function() {
+            loadReports();
+            checkBotStatus();
+            setInterval(checkBotStatus, 5000); // 5 saniyede bir durum kontrolü
+        });
+
+        function startCampaign() {
+            const config = getFormData();
+            
+            if (!validateForm(config)) {
+                return;
+            }
+
+            fetch('/start_campaign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    botRunning = true;
+                    updateBotControls();
+                    addLogMessage({ message: '🚀 Kampanya başlatıldı!' });
+                } else {
+                    alert('Hata: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Kampanya başlatılamadı!');
+            });
+        }
+
+        function stopCampaign() {
+            fetch('/stop_campaign', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    botRunning = false;
+                    updateBotControls();
+                    addLogMessage({ message: '⏹️ Kampanya durduruldu!' });
+                }
+            });
+        }
+
+        function saveConfig() {
+            const config = getFormData();
+            
+            fetch('/save_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ ' + data.message);
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            });
+        }
+
+        function getFormData() {
+            return {
+                email: document.getElementById('email').value,
+                password: document.getElementById('password').value,
+                keywords: document.getElementById('keywords').value,
+                max_profiles: parseInt(document.getElementById('max_profiles').value),
+                start_page: parseInt(document.getElementById('start_page').value),
+                message: document.getElementById('message').value,
+                delay_messages: parseInt(document.getElementById('delay_messages').value),
+                delay_searches: parseInt(document.getElementById('delay_searches').value)
+            };
+        }
+
+        function validateForm(config) {
+            if (!config.email || !config.password || !config.keywords) {
+                alert('❌ Lütfen tüm zorunlu alanları doldurun!');
+                return false;
+            }
+            return true;
+        }
+
+        function updateStatus(data) {
+            botRunning = data.running;
+            
+            // Durum göstergesi
+            statusIndicator.className = 'status-indicator ' + (data.running ? 'status-running' : 'status-ready');
+            statusText.textContent = data.running ? 'Çalışıyor' : 'Hazır';
+            
+            // Görevler
+            currentTask.textContent = data.current_task;
+            
+            // Progress bar
+            progressBar.style.width = data.progress + '%';
+            
+            // İstatistikler
+            if (data.stats) {
+                statFound.textContent = data.stats.found_profiles;
+                statProcessed.textContent = data.stats.processed;
+                statSuccessful.textContent = data.stats.successful;
+                statFailed.textContent = data.stats.failed;
+            }
+            
+            updateBotControls();
+        }
+
+        function updateBotControls() {
+            startBtn.disabled = botRunning;
+            stopBtn.disabled = !botRunning;
+        }
+
+        function addLogMessage(data) {
+            const timestamp = new Date().toLocaleTimeString();
+            logArea.innerHTML += `<div>[${timestamp}] ${data.message}</div>`;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function clearLogs() {
+            logArea.innerHTML = '';
+        }
+
+        function checkBotStatus() {
+            fetch('/status')
+            .then(response => response.json())
+            .then(data => updateStatus(data))
+            .catch(error => console.error('Status check error:', error));
+        }
+
+        function loadReports() {
+            fetch('/reports')
+            .then(response => response.json())
+            .then(data => {
+                const reportsList = document.getElementById('reports-list');
+                
+                if (data.reports && data.reports.length > 0) {
+                    reportsList.innerHTML = data.reports.map(report => `
+                        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                            <div>
+                                <div class="fw-bold">${report.filename}</div>
+                                <small class="text-muted">${report.created} • ${(report.size / 1024).toFixed(1)} KB</small>
+                            </div>
+                            <a href="/download_report/${report.filename}" class="btn btn-sm btn-primary-custom btn-custom">
+                                <i class="fas fa-download me-1"></i>İndir
+                            </a>
+                        </div>
+                    `).join('');
+                } else {
+                    reportsList.innerHTML = '<div class="text-center text-muted">Henüz rapor bulunmuyor</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Reports load error:', error);
+                document.getElementById('reports-list').innerHTML = '<div class="text-center text-danger">Raporlar yüklenemedi</div>';
+            });
+        }
+    </script>
+</body>
+</html>
