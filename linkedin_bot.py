@@ -41,11 +41,34 @@ class LinkedInBot:
         """Chrome WebDriver'ı başlatır"""
         try:
             options = webdriver.ChromeOptions()
+            
+            # Temel güvenlik ve otomasyon ayarları
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-blink-features=AutomationControlled")
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option('useAutomationExtension', False)
+            
+            # Linux server için özel ayarlar
+            if not sys.platform.startswith('win'):
+                options.add_argument("--headless=new")  # Yeni headless mod
+                options.add_argument("--disable-gpu")
+                options.add_argument("--disable-extensions")
+                options.add_argument("--disable-plugins")
+                options.add_argument("--disable-images")
+                options.add_argument("--disable-javascript")
+                options.add_argument("--disable-css")
+                options.add_argument("--no-first-run")
+                options.add_argument("--disable-default-apps")
+                options.add_argument("--disable-background-timer-throttling")
+                options.add_argument("--disable-backgrounding-occluded-windows")
+                options.add_argument("--disable-renderer-backgrounding")
+                options.add_argument("--disable-features=TranslateUI")
+                options.add_argument("--remote-debugging-port=9222")
+                options.add_argument("--window-size=1920,1080")
+                self.log("🖥️ Linux server modu: Headless Chrome aktif")
+            else:
+                self.log("🖥️ Windows modu: Normal Chrome")
 
             # Platforma göre chromedriver uzantısı
             if sys.platform.startswith('win'):
