@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-LinkedIn Bot Web GUI - Flask Arayüzü
-Tarayıcı tabanlı basit ve şık arayüz
+LinkedIn Bot Web GUI - Local Client Arayüzü
+Kullanıcının bilgisayarında çalışan tarayıcı tabanlı arayüz
 
 Özellikler:
-- Modern web arayüzü
+- Kullanıcının bilgisayarında çalışır
+- Otomatik Chrome/ChromeDriver kurulumu
 - Gerçek zamanlı güncellemeler
-- Kolay deployment
-- Responsive tasarım
+- Kolay kurulum ve kullanım
 """
 
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 import os
+import sys
 import threading
 import time
 import csv
+import webbrowser
 from datetime import datetime
 from linkedin_bot import LinkedInBot
 from dotenv import load_dotenv, set_key
 import json
+import subprocess
+from pathlib import Path
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'linkedin_bot_secret_key_2025'
@@ -31,6 +35,7 @@ bot_status = {
     'running': False,
     'current_task': 'Hazır',
     'progress': 0,
+    'installation_complete': False,
     'stats': {
         'found_profiles': 0,
         'processed': 0,
@@ -39,21 +44,103 @@ bot_status = {
     }
 }
 
-current_bot = None
+def check_installation():
+    """Kurulum durumunu kontrol et"""
+    try:
+        # Chrome kontrol
+        chrome_installed = False
+        chromedriver_installed = False
+        
+        # ChromeDriver kontrol
+        chromedriver_path = Path("chromedriver/chromedriver.exe" if sys.platform.startswith('win') else "chromedriver/chromedriver")
+        if chromedriver_path.exists():
+            chromedriver_installed = True
+            
+        # Chrome kontrol (basit)
+        try:
+            from selenium import webdriver
+            from selenium.webdriver.chrome.service import Service
+            options = webdriver.ChromeOptions()
+            options.add_argument("--headless")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            
+            if chromedriver_installed:
+                service = Service(str(chromedriver_path))
+                driver = webdriver.Chrome(service=service, options=options)
+                driver.quit()
+                chrome_installed = True
+            else:
+                from webdriver_manager.chrome import ChromeDriverManager
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=options)
+                driver.quit()
+                chrome_installed = True
+                
+        except Exception:
+            chrome_installed = False
+            
+        bot_status['installation_complete'] = chrome_installed and chromedriver_installed
+        return bot_status['installation_complete']
+        
+    except Exception as e:
+        print(f"Kurulum kontrol hatası: {e}")
+        return False
 
 @app.route('/')
 def index():
     """Ana sayfa"""
-    load_dotenv()
-    config = {
-        'email': os.getenv('LINKEDIN_EMAIL', ''),
-        'keywords': os.getenv('SEARCH_KEYWORDS', 'software engineer'),
-        'max_profiles': os.getenv('MAX_PROFILES_PER_SESSION', '50'),
-        'delay_messages': os.getenv('DELAY_BETWEEN_MESSAGES', '10'),
-        'delay_searches': os.getenv('DELAY_BETWEEN_SEARCHES', '5'),
-        'message': os.getenv('DEFAULT_MESSAGE', 'Merhaba! LinkedIn üzerinden bağlantı kurmak istiyorum.')
-    }
-    return render_template('index.html', config=config)
+    check_installation()
+    return render_template('index.html')
+
+@app.route('/install')
+def install_page():
+    """Kurulum sayfası"""
+    return render_template('install.html')
+
+@socketio.on('check_installation')
+def handle_check_installation():
+    """Kurulum durumunu kontrol et"""
+    installation_ok = check_installation()
+    emit('installation_status', {
+        'complete': installation_ok,
+        'message': 'Kurulum tamamlandı' if installation_ok else 'Kurulum gerekli'
+    })
+
+@socketio.on('start_installation')
+def handle_start_installation():
+    """Otomatik kurulumu başlat"""
+    def run_installation():
+        try:
+            emit('log_message', {'message': '🚀 Otomatik kurulum başlatılıyor...'})
+            
+            # auto_installer.py çalıştır
+            process = subprocess.Popen([
+                sys.executable, 'auto_installer.py'
+            ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+               universal_newlines=True, bufsize=1)
+            
+            # Çıktıları gerçek zamanlı gönder
+            for line in iter(process.stdout.readline, ''):
+                if line.strip():
+                    socketio.emit('log_message', {'message': line.strip()})
+                    
+            process.wait()
+            
+            if process.returncode == 0:
+                bot_status['installation_complete'] = True
+                socketio.emit('installation_status', {
+                    'complete': True,
+                    'message': '✅ Kurulum başarıyla tamamlandı!'
+                })
+                socketio.emit('log_message', {'message': '🎉 Kurulum tamamlandı! Sayfayı yenileyin.'})
+            else:
+                socketio.emit('log_message', {'message': '❌ Kurulum başarısız oldu!'})
+                
+        except Exception as e:
+            socketio.emit('log_message', {'message': f'❌ Kurulum hatası: {e}'})
+            
+    threading.Thread(target=run_installation, daemon=True).start()
 
 @app.route('/save_config', methods=['POST'])
 def save_config():
