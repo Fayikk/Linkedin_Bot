@@ -278,4 +278,11 @@ def run_bot_campaign(keywords, max_profiles, start_page, custom_message):
 if __name__ == '__main__':
     print("🚀 LinkedIn Bot Web GUI başlatılıyor...")
     print("🌐 Tarayıcınızda şu adresi açın: http://localhost:5000")
-    socketio.run(app, debug=False, host='0.0.0.0', port=5000)
+    try:
+        import eventlet
+        import eventlet.wsgi
+        socketio.run(app, debug=False, host='0.0.0.0', port=5000)
+    except ImportError:
+        print("⚠️ eventlet yüklü değil! Lütfen requirements.txt ile yükleyin.")
+        print("pip install eventlet")
+        socketio.run(app, debug=False, host='0.0.0.0', port=5000)

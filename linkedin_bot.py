@@ -12,6 +12,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 from datetime import datetime
+import sys
 
 class LinkedInBot:
     def __init__(self, log_callback=None):
@@ -45,34 +46,39 @@ class LinkedInBot:
             options.add_argument("--disable-blink-features=AutomationControlled")
             options.add_experimental_option("excludeSwitches", ["enable-automation"])
             options.add_experimental_option('useAutomationExtension', False)
-            
-            # Önce manuel driver yolunu dene
-            manual_driver_path = os.path.join(os.getcwd(), "chromedriver", "chromedriver.exe")
-            
-            if os.path.exists(manual_driver_path):
-                self.log(f"🔧 Manuel ChromeDriver kullanılıyor: {manual_driver_path}")
-                service = Service(manual_driver_path)
+
+            # Platforma göre chromedriver uzantısı
+            if sys.platform.startswith('win'):
+                chromedriver_filename = "chromedriver.exe"
             else:
-                self.log("🔧 ChromeDriverManager kullanılıyor...")
-                # ChromeDriver yolunu doğru şekilde al
-                driver_path = ChromeDriverManager().install()
-                
-                # Eğer yol THIRD_PARTY_NOTICES dosyasını işaret ediyorsa, doğru chromedriver.exe yolunu bul
-                if "THIRD_PARTY_NOTICES" in driver_path:
-                    driver_dir = os.path.dirname(driver_path)
-                    driver_path = os.path.join(driver_dir, "chromedriver.exe")
-                    
-                    # Eğer chromedriver.exe yoksa, bir üst dizini kontrol et
-                    if not os.path.exists(driver_path):
-                        parent_dir = os.path.dirname(driver_dir)
-                        driver_path = os.path.join(parent_dir, "chromedriver.exe")
-                
-                self.log(f"🔧 ChromeDriver yolu: {driver_path}")
-                service = Service(driver_path)
-            
+                chromedriver_filename = "chromedriver"
+
+            # .env'den chromedriver path al (varsa)
+            env_driver_path = os.getenv('CHROMEDRIVER_PATH')
+            if env_driver_path and os.path.exists(env_driver_path):
+                self.log(f"🔧 .env'den ChromeDriver kullanılıyor: {env_driver_path}")
+                service = Service(env_driver_path)
+            else:
+                # Önce manuel driver yolunu dene (chromedriver klasörü içinde)
+                manual_driver_path = os.path.join(os.getcwd(), "chromedriver", chromedriver_filename)
+                if os.path.exists(manual_driver_path):
+                    self.log(f"🔧 Manuel ChromeDriver kullanılıyor: {manual_driver_path}")
+                    service = Service(manual_driver_path)
+                else:
+                    self.log("🔧 ChromeDriverManager kullanılıyor...")
+                    driver_path = ChromeDriverManager().install()
+                    # Eğer yol THIRD_PARTY_NOTICES dosyasını işaret ediyorsa, doğru chromedriver dosyasını bul
+                    if "THIRD_PARTY_NOTICES" in driver_path:
+                        driver_dir = os.path.dirname(driver_path)
+                        driver_path = os.path.join(driver_dir, chromedriver_filename)
+                        if not os.path.exists(driver_path):
+                            parent_dir = os.path.dirname(driver_dir)
+                            driver_path = os.path.join(parent_dir, chromedriver_filename)
+                    self.log(f"🔧 ChromeDriver yolu: {driver_path}")
+                    service = Service(driver_path)
+
             self.driver = webdriver.Chrome(service=service, options=options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
             self.log("✅ WebDriver başarıyla başlatıldı")
             return True
         except Exception as e:
